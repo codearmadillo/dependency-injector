@@ -14,7 +14,11 @@ function Injectable() {
     return out;
   };
   return function <T>(target: new (...args: any[]) => T) {
-    Reflect.defineMetadata('di:injection-token', generateToken(), target);
+    Reflect.defineMetadata(
+      'di:injection-token',
+      `${target.name}_${generateToken()}`,
+      target
+    );
   };
 }
 
@@ -22,8 +26,16 @@ function Injectable() {
  * Injector
  */
 class Injector {
-  private static map: Map<string, Object> = new Map();
-  public static inject<T>(target: new (...args: any[]) => T): T {
+  private map: Map<string, Object>;
+  private static _instance: Injector;
+  private constructor() {
+    this.map = new Map();
+  }
+  public static getInstance(): Injector {
+    if (!Injector._instance) Injector._instance = new Injector();
+    return Injector._instance;
+  }
+  public inject<T>(target: new (...args: any[]) => T): T {
     /**
      * Resolve injection token
      */
@@ -35,44 +47,42 @@ class Injector {
       );
 
     /**
-     * Check if there already is an instance
+     * Resolve if it doesnt exist
      */
-    if (Injector.map.has(injectionTokenForType))
-      return Injector.map.get(injectionTokenForType) as T;
+    if (!this.map.has(injectionTokenForType)) {
+      const factories: (new (...args: any[]) => Object)[] =
+        Reflect.getMetadata('design:paramtypes', target) ?? [];
+      const dependencies = factories.map((factory) => {
+        return Injector.getInstance().inject(factory);
+      });
+      this.map.set(injectionTokenForType, new target(...dependencies));
+    }
 
     /**
-     * Otherwise start resolving it
+     * Return
      */
-    const dependencies: (new (...args: any[]) => Object)[] =
-      Reflect.getMetadata('design:paramtypes', target);
-    console.log(dependencies);
-
-    return null;
+    return (this.map.get(injectionTokenForType) as T) ?? null;
   }
 }
 
-class Service1 {}
+@Injectable()
+class Service3 {
+  public foo: string = 'ghi';
+}
+
+@Injectable()
+class Service2 {
+  public foo: string = 'def';
+  constructor(public service: Service3) {}
+}
+
+@Injectable()
+class Service1 {
+  public foo: string = 'abc';
+  constructor(public service: Service2) {}
+}
 
 @Injectable()
 class MyService {
   constructor(public service: Service1) {}
 }
-
-const test = Injector.inject<MyService>(MyService);
-
-/*
-
-export default (constructor: any) => {
-  const functionString = constructor.toString();
-  const params = GetArgumentNames(functionString);
-  
-  const newConstructor: any = function (...args) {
-      const newObj = new constructor(args);
-      params.map((param, index) => newObj[param] = args[index]);    
-      return newObj;
-  }
-
-  newConstructor.prototype = constructor.prototype;
-  return newConstructor;
-}
-*/
