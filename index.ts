@@ -86,3 +86,6 @@ class Service1 {
 class MyService {
   constructor(public service: Service1) {}
 }
+
+const a = Injector.getInstance().inject(MyService);
+console.log(a);
